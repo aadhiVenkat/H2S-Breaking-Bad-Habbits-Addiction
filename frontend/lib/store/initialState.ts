@@ -7,6 +7,7 @@ export function buildBlankState(): AppState {
     profile: null,
     assessment: null,
     plan: null,
+    plans: [],
     checkIns: [],
     cravingEvents: [],
     relapseEvents: [],

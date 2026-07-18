@@ -4,6 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { HeartHandshake, LifeBuoy } from "lucide-react";
 import { NAV_ITEMS } from "@/components/layout/navConfig";
+import { ThemeToggle } from "@/components/profile/ThemeToggle";
 import { cn } from "@/lib/utils/cn";
 import { useApp } from "@/lib/store/AppContext";
 
@@ -13,12 +14,15 @@ export function Sidebar() {
 
   return (
     <aside className="hidden lg:flex lg:w-64 lg:flex-col lg:border-r lg:border-border-subtle lg:px-4 lg:py-6 lg:shrink-0">
-      <Link href="/dashboard" className="flex items-center gap-2 px-2 mb-8">
-        <span className="h-8 w-8 rounded-lg bg-accent-soft flex items-center justify-center">
-          <span className="h-3 w-3 rounded-full bg-accent" />
-        </span>
-        <span className="font-serif text-xl italic text-foreground">Reclaim AI</span>
-      </Link>
+      <div className="mb-8 flex items-center justify-between gap-2 px-2">
+        <Link href="/dashboard" className="flex min-w-0 items-center gap-2">
+          <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-accent-soft">
+            <span className="h-3 w-3 rounded-full bg-accent" />
+          </span>
+          <span className="truncate font-serif text-xl italic text-foreground">Reclaim AI</span>
+        </Link>
+        <ThemeToggle compact />
+      </div>
 
       <nav className="flex-1 space-y-1">
         {NAV_ITEMS.map((item) => {

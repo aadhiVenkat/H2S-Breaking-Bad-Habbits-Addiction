@@ -10,8 +10,51 @@ const OPTIONS: { value: ThemePreference; label: string; icon: typeof Sun }[] = [
   { value: "system", label: "System", icon: Monitor },
 ];
 
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({
+  className,
+  compact = false,
+}: {
+  className?: string;
+  /** Icon-only control for top bar / sidebar. */
+  compact?: boolean;
+}) {
   const { theme, setTheme } = useTheme();
+
+  if (compact) {
+    return (
+      <div
+        role="radiogroup"
+        aria-label="Theme"
+        className={cn(
+          "inline-flex items-center gap-0.5 rounded-full border border-border-soft bg-overlay p-0.5",
+          className,
+        )}
+      >
+        {OPTIONS.map(({ value, label, icon: Icon }) => {
+          const active = theme === value;
+          return (
+            <button
+              key={value}
+              type="button"
+              role="radio"
+              aria-checked={active}
+              aria-label={label}
+              title={label}
+              onClick={() => setTheme(value)}
+              className={cn(
+                "flex h-8 w-8 items-center justify-center rounded-full transition-colors",
+                active
+                  ? "bg-surface-raised text-foreground shadow-sm"
+                  : "text-foreground-muted hover:text-foreground",
+              )}
+            >
+              <Icon size={15} aria-hidden />
+            </button>
+          );
+        })}
+      </div>
+    );
+  }
 
   return (
     <div className={cn("space-y-2", className)}>

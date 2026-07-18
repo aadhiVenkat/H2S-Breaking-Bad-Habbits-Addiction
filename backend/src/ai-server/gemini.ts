@@ -15,7 +15,7 @@ import {
 export type GeminiChatMode = "text" | "json";
 
 export function getGeminiModel(): string {
-  return process.env.GEMINI_MODEL?.trim() || "gemini-2.0-flash";
+  return process.env.GEMINI_MODEL?.trim() || "gemini-3.5-flash";
 }
 
 /**
@@ -52,6 +52,37 @@ function statusFromError(error: unknown): number | undefined {
   return undefined;
 }
 
+type ResponsePart = { text?: string; thought?: boolean };
+
+/**
+ * Prefer answer parts over thought summaries. The legacy SDK's `.text()` joins
+ * every part, which breaks JSON mode when thinking text contains braces.
+ */
+export function extractCandidateText(response: {
+  candidates?: Array<{
+    content?: { parts?: ResponsePart[] };
+    finishReason?: string;
+  }>;
+}): string {
+  const candidate = response.candidates?.[0];
+  const parts = candidate?.content?.parts ?? [];
+  const answer = parts
+    .filter((part) => part.text && !part.thought)
+    .map((part) => part.text!.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  if (answer) return answer;
+
+  const fallback = parts
+    .filter((part) => part.text)
+    .map((part) => part.text!.trim())
+    .filter(Boolean)
+    .join("\n")
+    .trim();
+  return fallback;
+}
+
 export async function geminiChat(options: {
   system: string;
   user: string;
@@ -65,17 +96,35 @@ export async function geminiChat(options: {
   const mode = options.mode ?? "text";
 
   try {
+    // thinkingConfig / higher maxOutputTokens keep Gemini 3.x from burning the
+    // output budget on reasoning and truncating structured JSON.
+    const generationConfig = {
+      temperature: options.temperature ?? 0.7,
+      maxOutputTokens: mode === "json" ? 8192 : 4096,
+      ...(mode === "json" ? { responseMimeType: "application/json" as const } : {}),
+      thinkingConfig: {
+        thinkingLevel: mode === "json" ? "minimal" : "low",
+      },
+    };
+
     const model = client.getGenerativeModel({
       model: modelName,
       systemInstruction: options.system,
-      generationConfig: {
-        temperature: options.temperature ?? 0.7,
-        ...(mode === "json" ? { responseMimeType: "application/json" as const } : {}),
-      },
+      generationConfig: generationConfig as Parameters<
+        typeof client.getGenerativeModel
+      >[0]["generationConfig"],
     });
 
     const result = await model.generateContent(options.user);
-    const content = result.response.text()?.trim();
+    const finishReason = result.response.candidates?.[0]?.finishReason;
+    if (finishReason === "MAX_TOKENS") {
+      throw providerError(
+        "gemini",
+        "Gemini ran out of output tokens before finishing. Please try again.",
+      );
+    }
+
+    const content = extractCandidateText(result.response);
     if (!content) {
       throw providerError("gemini", "Gemini returned an empty response.");
     }

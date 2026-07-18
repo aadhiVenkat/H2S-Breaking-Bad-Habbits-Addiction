@@ -4,6 +4,7 @@ import type {
   CravingEvent,
   DailyCheckIn,
   EmergencySessionLog,
+  HabitProfile,
   Nudge,
   AIInsight,
   OnboardingAssessment,
@@ -16,6 +17,14 @@ import { buildBlankState } from "@/lib/store/initialState";
 import { buildMilestones } from "@/lib/mock-data/milestones";
 import { computeStreak } from "@/lib/utils/streak";
 import { isoDate } from "@/lib/utils/dates";
+import {
+  normalizeUserProfile,
+  planForHabit,
+  removeHabitFromProfile,
+  upsertHabitInProfile,
+  upsertPlan,
+  withActiveHabit,
+} from "@/lib/utils/habits";
 
 export type AppAction =
   | { type: "HYDRATE"; payload: AppState }
@@ -36,6 +45,10 @@ export type AppAction =
   | { type: "UPDATE_PROFILE"; payload: Partial<UserProfile["habit"]> }
   | { type: "UPDATE_USER_PROFILE"; payload: Partial<Pick<UserProfile, "name" | "username" | "geminiApiKey">> }
   | { type: "UPDATE_PLAN"; payload: RecoveryPlan }
+  | { type: "ADD_HABIT"; payload: { habit: HabitProfile; plan: RecoveryPlan; setActive?: boolean } }
+  | { type: "SET_ACTIVE_HABIT"; payload: { habitId: string } }
+  | { type: "UPDATE_HABIT"; payload: HabitProfile }
+  | { type: "REMOVE_HABIT"; payload: { habitId: string } }
   | { type: "LOG_EMERGENCY_SESSION"; payload: EmergencySessionLog };
 
 function recomputeDerived(state: AppState): AppState {
@@ -63,11 +76,14 @@ export function appReducer(state: AppState, action: AppAction): AppState {
 
     case "COMPLETE_ONBOARDING": {
       const { assessment, profile, plan } = action.payload;
+      const normalized = normalizeUserProfile(profile);
+      const linkedPlan = { ...plan, habitId: plan.habitId ?? normalized.activeHabitId };
       return recomputeDerived({
         ...state,
         assessment,
-        profile,
-        plan,
+        profile: { ...normalized, currentPlanId: linkedPlan.id },
+        plan: linkedPlan,
+        plans: upsertPlan(state.plans, linkedPlan),
         streak: {
           currentStreakDays: 0,
           longestStreakDays: state.streak.longestStreakDays,
@@ -136,15 +152,79 @@ export function appReducer(state: AppState, action: AppAction): AppState {
       };
 
     case "UPDATE_PROFILE":
-      return state.profile
-        ? { ...state, profile: { ...state.profile, habit: { ...state.profile.habit, ...action.payload } } }
-        : state;
+      if (!state.profile) return state;
+      {
+        const nextHabit = { ...state.profile.habit, ...action.payload };
+        const profile = upsertHabitInProfile(state.profile, nextHabit);
+        return { ...state, profile };
+      }
 
     case "UPDATE_USER_PROFILE":
       return state.profile ? { ...state, profile: { ...state.profile, ...action.payload } } : state;
 
-    case "UPDATE_PLAN":
-      return { ...state, plan: action.payload };
+    case "UPDATE_PLAN": {
+      const linked = {
+        ...action.payload,
+        habitId: action.payload.habitId ?? state.profile?.activeHabitId,
+      };
+      return {
+        ...state,
+        plan: linked,
+        plans: upsertPlan(state.plans, linked),
+        profile: state.profile ? { ...state.profile, currentPlanId: linked.id } : state.profile,
+      };
+    }
+
+    case "ADD_HABIT": {
+      if (!state.profile) return state;
+      const setActive = action.payload.setActive !== false;
+      let profile = upsertHabitInProfile(state.profile, action.payload.habit);
+      if (setActive) {
+        profile = withActiveHabit(profile, action.payload.habit.id);
+      }
+      const linkedPlan = {
+        ...action.payload.plan,
+        habitId: action.payload.plan.habitId ?? action.payload.habit.id,
+      };
+      const plans = upsertPlan(state.plans, linkedPlan);
+      const plan = setActive ? linkedPlan : state.plan;
+      return {
+        ...state,
+        profile: setActive ? { ...profile, currentPlanId: linkedPlan.id } : profile,
+        plans,
+        plan,
+      };
+    }
+
+    case "SET_ACTIVE_HABIT": {
+      if (!state.profile) return state;
+      const profile = withActiveHabit(state.profile, action.payload.habitId);
+      const plan = planForHabit(state.plans, profile.activeHabitId) ?? state.plan;
+      return {
+        ...state,
+        profile: { ...profile, currentPlanId: plan?.id ?? profile.currentPlanId },
+        plan,
+      };
+    }
+
+    case "UPDATE_HABIT": {
+      if (!state.profile) return state;
+      return { ...state, profile: upsertHabitInProfile(state.profile, action.payload) };
+    }
+
+    case "REMOVE_HABIT": {
+      if (!state.profile) return state;
+      const nextProfile = removeHabitFromProfile(state.profile, action.payload.habitId);
+      if (!nextProfile) return state;
+      const plans = state.plans.filter((p) => p.habitId !== action.payload.habitId);
+      const plan = planForHabit(plans, nextProfile.activeHabitId) ?? plans[0] ?? null;
+      return {
+        ...state,
+        profile: { ...nextProfile, currentPlanId: plan?.id ?? null },
+        plans,
+        plan,
+      };
+    }
 
     case "LOG_EMERGENCY_SESSION":
       return { ...state, emergencyLogs: [...state.emergencyLogs, action.payload] };

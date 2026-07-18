@@ -1,4 +1,5 @@
-import type { AppState } from "@/lib/types";
+import type { AppState, RecoveryPlan, UserProfile } from "@/lib/types";
+import { normalizeUserProfile } from "@/lib/utils/habits";
 
 /** Legacy single-user key — migrated into per-user reclaim_state_* on first load. */
 export const LEGACY_STORAGE_KEY = "breakfree_state_v1";
@@ -31,25 +32,58 @@ export function loadPersistedState(userId: string | null): AppState | null {
   }
 }
 
-/** Map legacy profile.openaiApiKey → geminiApiKey on read. */
+/** Map legacy profile.openaiApiKey → geminiApiKey and single-habit → multi-habit. */
 function migratePersistedState(state: AppState): AppState {
-  const profile = state.profile as
-    | (AppState["profile"] & { openaiApiKey?: string })
-    | null;
-  if (!profile) return state;
-  const legacy = profile.openaiApiKey?.trim();
-  if (!legacy && !("openaiApiKey" in profile)) return state;
-
-  // Drop legacy openaiApiKey while migrating to geminiApiKey
-  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit only
-  const { openaiApiKey, ...rest } = profile;
-  return {
+  const next: AppState = {
     ...state,
-    profile: {
-      ...rest,
-      geminiApiKey: rest.geminiApiKey?.trim() || legacy || undefined,
-    },
+    plans: Array.isArray(state.plans) ? state.plans : state.plan ? [state.plan] : [],
   };
+
+  const profile = next.profile as
+    | (UserProfile & { openaiApiKey?: string })
+    | null;
+
+  if (!profile) return next;
+
+  const { openaiApiKey, ...rest } = profile;
+  const legacy = typeof openaiApiKey === "string" ? openaiApiKey.trim() : "";
+
+  const migratedProfile = normalizeUserProfile({
+    ...rest,
+    geminiApiKey: rest.geminiApiKey?.trim() || legacy || undefined,
+  } as UserProfile);
+
+  const plans = ensurePlansLinked(next.plans, next.plan, migratedProfile.activeHabitId);
+  const plan =
+    plans.find((p) => p.habitId === migratedProfile.activeHabitId) ??
+    next.plan ??
+    plans[0] ??
+    null;
+
+  return {
+    ...next,
+    profile: {
+      ...migratedProfile,
+      currentPlanId: plan?.id ?? migratedProfile.currentPlanId,
+    },
+    plans,
+    plan,
+  };
+}
+
+function ensurePlansLinked(
+  plans: RecoveryPlan[],
+  activePlan: RecoveryPlan | null | undefined,
+  activeHabitId: string,
+): RecoveryPlan[] {
+  const list = [...plans];
+  if (activePlan && !list.some((p) => p.id === activePlan.id)) {
+    list.unshift(activePlan);
+  }
+  return list.map((p) => ({
+    ...p,
+    habitId: p.habitId ?? activeHabitId,
+  }));
 }
 
 export function persistState(userId: string | null, state: AppState): void {

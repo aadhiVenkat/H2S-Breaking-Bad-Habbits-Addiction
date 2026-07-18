@@ -22,7 +22,7 @@ Server listens on [http://localhost:4000](http://localhost:4000) by default.
 | Variable | Required | Description |
 |----------|----------|-------------|
 | `GEMINI_API_KEY` | Fallback for Gemini routes | Used when the client does not send `X-Gemini-Key` |
-| `GEMINI_MODEL` | No | Default `gemini-2.0-flash` |
+| `GEMINI_MODEL` | No | Default `gemini-3.5-flash` |
 | `PORT` | No | Default `4000` |
 | `CORS_ORIGIN` | No | Default `http://localhost:3000` |
 

@@ -16,6 +16,7 @@ import type {
   CravingEvent,
   DailyCheckIn,
   EmergencySessionLog,
+  HabitProfile,
   Nudge,
   OnboardingAssessment,
   RecoveryPlan,
@@ -47,6 +48,10 @@ interface AppContextValue {
   updateProfile: (patch: Partial<UserProfile["habit"]>) => void;
   updateUserProfile: (patch: Partial<Pick<UserProfile, "name" | "username" | "geminiApiKey">>) => void;
   updatePlan: (plan: RecoveryPlan) => void;
+  addHabit: (habit: HabitProfile, plan: RecoveryPlan, setActive?: boolean) => void;
+  setActiveHabit: (habitId: string) => void;
+  updateHabit: (habit: HabitProfile) => void;
+  removeHabit: (habitId: string) => void;
   logEmergencySession: (log: EmergencySessionLog) => void;
 }
 
@@ -118,6 +123,20 @@ export function AppProvider({ children }: { children: ReactNode }) {
     [],
   );
   const updatePlan = useCallback((plan: RecoveryPlan) => dispatch({ type: "UPDATE_PLAN", payload: plan }), []);
+  const addHabit = useCallback(
+    (habit: HabitProfile, plan: RecoveryPlan, setActive = true) =>
+      dispatch({ type: "ADD_HABIT", payload: { habit, plan, setActive } }),
+    [],
+  );
+  const setActiveHabit = useCallback(
+    (habitId: string) => dispatch({ type: "SET_ACTIVE_HABIT", payload: { habitId } }),
+    [],
+  );
+  const updateHabit = useCallback((habit: HabitProfile) => dispatch({ type: "UPDATE_HABIT", payload: habit }), []);
+  const removeHabit = useCallback(
+    (habitId: string) => dispatch({ type: "REMOVE_HABIT", payload: { habitId } }),
+    [],
+  );
   const logEmergencySession = useCallback(
     (log: EmergencySessionLog) => dispatch({ type: "LOG_EMERGENCY_SESSION", payload: log }),
     [],
@@ -142,6 +161,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       updateUserProfile,
       updatePlan,
+      addHabit,
+      setActiveHabit,
+      updateHabit,
+      removeHabit,
       logEmergencySession,
     }),
     [
@@ -162,6 +185,10 @@ export function AppProvider({ children }: { children: ReactNode }) {
       updateProfile,
       updateUserProfile,
       updatePlan,
+      addHabit,
+      setActiveHabit,
+      updateHabit,
+      removeHabit,
       logEmergencySession,
     ],
   );

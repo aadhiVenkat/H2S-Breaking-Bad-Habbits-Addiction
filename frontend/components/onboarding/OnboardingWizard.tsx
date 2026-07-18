@@ -1,9 +1,17 @@
 "use client";
 
-import { useState } from "react";
-import { useRouter } from "next/navigation";
+import { useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
-import type { HabitType, OnboardingAssessment, RecoveryGoal, RecoveryPlan, TimeOfDay, TriggerCategory, UserProfile } from "@/lib/types";
+import type {
+  HabitType,
+  OnboardingAssessment,
+  RecoveryGoal,
+  RecoveryPlan,
+  TimeOfDay,
+  TriggerCategory,
+  UserProfile,
+} from "@/lib/types";
 import { Button } from "@/components/ui/Button";
 import { StepProgress } from "@/components/onboarding/StepProgress";
 import { WelcomeStep } from "@/components/onboarding/WelcomeStep";
@@ -13,6 +21,7 @@ import { MotivationStep } from "@/components/onboarding/MotivationStep";
 import { GoalStep } from "@/components/onboarding/GoalStep";
 import { PlanRevealStep } from "@/components/onboarding/PlanRevealStep";
 import { habitLabel } from "@/lib/utils/labels";
+import { habitFromAssessment, newHabitId } from "@/lib/utils/habits";
 import { useApp } from "@/lib/store/AppContext";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { buildFallbackPlan, generateRecoveryPlan } from "@/lib/ai/planService";
@@ -56,23 +65,33 @@ function toggleItem<T>(list: T[], item: T): T[] {
 
 export function OnboardingWizard() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const mode = searchParams.get("mode");
+  const isAddHabit = mode === "add";
+
   const { account } = useAuth();
-  const { completeOnboarding, updatePlan, state } = useApp();
+  const { completeOnboarding, updatePlan, addHabit, state } = useApp();
   const [step, setStep] = useState(1);
   const [form, setForm] = useState<FormState>(() => ({
     ...initialForm,
-    name: account?.displayName ?? "",
+    name: state.profile?.name || account?.displayName || "",
   }));
   const [loadingPlan, setLoadingPlan] = useState(false);
   const [planError, setPlanError] = useState<string | null>(null);
   const [planMeta, setPlanMeta] = useState<AiResponseMeta | null>(null);
   const [usedFallback, setUsedFallback] = useState(false);
   const [generatedPlan, setGeneratedPlan] = useState<RecoveryPlan | null>(null);
+  const [pendingHabitId] = useState(() => newHabitId());
+
+  const existingHabitTypes = useMemo(
+    () => (isAddHabit ? (state.profile?.habits ?? []).map((h) => h.habit) : []),
+    [isAddHabit, state.profile?.habits],
+  );
 
   const canAdvance = (() => {
     switch (step) {
       case 1:
-        return form.name.trim().length > 0 && form.habit !== null;
+        return (isAddHabit || form.name.trim().length > 0) && form.habit !== null;
       case 2:
         return true;
       case 3:
@@ -86,13 +105,15 @@ export function OnboardingWizard() {
     }
   })();
 
-  function finishOnboarding(assessment: OnboardingAssessment, plan: RecoveryPlan) {
+  function finishFirstOnboarding(assessment: OnboardingAssessment, plan: RecoveryPlan) {
     // Retry after a fallback should replace the plan only — keep the same profile/streak.
-    if (state.profile?.onboarded) {
+    if (state.profile?.onboarded && !isAddHabit) {
       updatePlan(plan);
       return;
     }
 
+    const habit = habitFromAssessment(assessment, pendingHabitId);
+    const linkedPlan = { ...plan, habitId: habit.id };
     const profile: UserProfile = {
       id: account?.id ?? `user-${Date.now()}`,
       name: assessment.name,
@@ -100,20 +121,18 @@ export function OnboardingWizard() {
       geminiApiKey: account?.geminiApiKey,
       createdAt: new Date().toISOString(),
       onboarded: true,
-      habit: {
-        habit: assessment.habit,
-        habitLabel: assessment.habitLabel,
-        frequencyPerDay: assessment.frequencyPerDay,
-        yearsActive: assessment.yearsActive,
-        intensity: assessment.intensity,
-        triggers: assessment.triggers,
-        peakTimes: assessment.peakTimes,
-        motivation: assessment.motivation,
-        goal: assessment.goal,
-      },
-      currentPlanId: plan.id,
+      habit,
+      habits: [habit],
+      activeHabitId: habit.id,
+      currentPlanId: linkedPlan.id,
     };
-    completeOnboarding(assessment, profile, plan);
+    completeOnboarding(assessment, profile, linkedPlan);
+  }
+
+  function finishAddHabit(assessment: OnboardingAssessment, plan: RecoveryPlan) {
+    const habit = habitFromAssessment(assessment, pendingHabitId);
+    const linkedPlan = { ...plan, habitId: habit.id };
+    addHabit(habit, linkedPlan, true);
   }
 
   async function handleGeneratePlan() {
@@ -126,7 +145,7 @@ export function OnboardingWizard() {
     setPlanMeta(null);
 
     const assessment: OnboardingAssessment = {
-      name: form.name.trim(),
+      name: (form.name.trim() || state.profile?.name || "friend"),
       habit: form.habit,
       habitLabel: habitLabel(form.habit),
       frequencyPerDay: form.frequencyPerDay,
@@ -145,16 +164,18 @@ export function OnboardingWizard() {
       const plan = await generateRecoveryPlan(assessment);
       const meta = extractAiMeta(plan);
       setPlanMeta(meta);
-      recordLastAiAction("Recovery plan", meta);
+      recordLastAiAction(isAddHabit ? "Add habit plan" : "Recovery plan", meta);
       setGeneratedPlan(plan);
-      finishOnboarding(assessment, plan);
+      if (isAddHabit) finishAddHabit(assessment, plan);
+      else finishFirstOnboarding(assessment, plan);
     } catch (err) {
       const message = getErrorMessage(err, "Could not generate your recovery plan.");
       setPlanError(message);
       const fallback = buildFallbackPlan(assessment);
       setUsedFallback(true);
       setGeneratedPlan(fallback);
-      finishOnboarding(assessment, fallback);
+      if (isAddHabit) finishAddHabit(assessment, fallback);
+      else finishFirstOnboarding(assessment, fallback);
     } finally {
       setLoadingPlan(false);
     }
@@ -169,6 +190,10 @@ export function OnboardingWizard() {
   }
 
   function handleBack() {
+    if (step === 1 && isAddHabit) {
+      router.push("/profile");
+      return;
+    }
     setStep((s) => Math.max(1, s - 1));
   }
 
@@ -185,6 +210,15 @@ export function OnboardingWizard() {
           <WelcomeStep
             name={form.name}
             habit={form.habit}
+            hideName={isAddHabit}
+            eyebrow={isAddHabit ? "Add habit" : "Step 1 of 6"}
+            title={isAddHabit ? "Add another habit to work on" : "Let's get to know what you're working on"}
+            description={
+              isAddHabit
+                ? "We'll build a separate plan for this habit. You can switch between habits anytime from Profile."
+                : "No judgment here — just context so your coach can actually help."
+            }
+            disabledHabits={existingHabitTypes}
             onChangeName={(name) => setForm((f) => ({ ...f, name }))}
             onSelectHabit={(habit) => setForm((f) => ({ ...f, habit }))}
           />
@@ -225,25 +259,25 @@ export function OnboardingWizard() {
           <PlanRevealStep
             plan={generatedPlan}
             loading={loadingPlan}
-            name={form.name}
+            name={form.name || state.profile?.name || "friend"}
             error={planError}
             isFallback={usedFallback}
             meta={planMeta}
             onRetry={() => void handleGeneratePlan()}
-            onEnter={() => router.push("/dashboard")}
+            onEnter={() => router.push(isAddHabit ? "/profile" : "/dashboard")}
           />
         )}
       </div>
 
       {step < 6 && (
         <div className="mt-10 flex items-center gap-3">
-          {step > 1 && (
+          {(step > 1 || isAddHabit) && (
             <Button variant="ghost" size="lg" icon={<ArrowLeft size={18} />} onClick={handleBack}>
               Back
             </Button>
           )}
           <Button size="lg" fullWidth disabled={!canAdvance} onClick={handleNext} iconRight={<ArrowRight size={18} />}>
-            {step === 5 ? "Generate my plan" : "Continue"}
+            {step === 5 ? (isAddHabit ? "Generate plan & add" : "Generate my plan") : "Continue"}
           </Button>
         </div>
       )}

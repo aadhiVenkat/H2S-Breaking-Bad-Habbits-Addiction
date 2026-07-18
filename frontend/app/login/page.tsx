@@ -25,7 +25,6 @@ export default function LoginPage() {
   const [username, setUsername] = useState("");
   const [password, setPassword] = useState("");
   const [displayName, setDisplayName] = useState("");
-  const [geminiApiKey, setGeminiApiKey] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
 
@@ -34,8 +33,7 @@ export default function LoginPage() {
     router.replace(routeAfterAuth(session.userId));
   }, [ready, session, router]);
 
-  const createReady =
-    username.trim().length > 0 && password.length >= 4 && geminiApiKey.trim().length > 0;
+  const createReady = username.trim().length > 0 && password.length >= 4;
   const loginReady = username.trim().length > 0 && password.length > 0;
   const canSubmit = mode === "create" ? createReady : loginReady;
 
@@ -50,7 +48,6 @@ export default function LoginPage() {
               username,
               password,
               displayName: displayName || undefined,
-              geminiApiKey: geminiApiKey.trim(),
             })
           : await login(username, password);
       router.replace(routeAfterAuth(account.id));
@@ -160,36 +157,17 @@ export default function LoginPage() {
               </div>
 
               {mode === "create" && (
-                <>
-                  <div>
-                    <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-foreground">
-                      Display name <span className="font-normal text-foreground-subtle">(optional)</span>
-                    </label>
-                    <Input
-                      id="displayName"
-                      value={displayName}
-                      onChange={(e) => setDisplayName(e.target.value)}
-                      placeholder="How should we greet you?"
-                    />
-                  </div>
-                  <div>
-                    <label htmlFor="geminiKey" className="mb-1.5 block text-sm font-medium text-foreground">
-                      Google Gemini API key
-                    </label>
-                    <Input
-                      id="geminiKey"
-                      type="password"
-                      autoComplete="off"
-                      value={geminiApiKey}
-                      onChange={(e) => setGeminiApiKey(e.target.value)}
-                      placeholder="AIza…"
-                      required
-                    />
-                    <p className="mt-1.5 text-xs text-foreground-subtle">
-                      Stored only in this browser. Sent as X-Gemini-Key on AI requests.
-                    </p>
-                  </div>
-                </>
+                <div>
+                  <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-foreground">
+                    Display name <span className="font-normal text-foreground-subtle">(optional)</span>
+                  </label>
+                  <Input
+                    id="displayName"
+                    value={displayName}
+                    onChange={(e) => setDisplayName(e.target.value)}
+                    placeholder="How should we greet you?"
+                  />
+                </div>
               )}
 
               {error && (

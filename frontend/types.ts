@@ -34,6 +34,8 @@ export type TimeOfDay = "early_morning" | "morning" | "afternoon" | "evening" | 
 export type MoodLevel = 1 | 2 | 3 | 4 | 5;
 
 export interface HabitProfile {
+  /** Stable id so users can track multiple habits and switch the active one. */
+  id: string;
   habit: HabitType;
   habitLabel: string;
   frequencyPerDay: number;
@@ -45,7 +47,7 @@ export interface HabitProfile {
   goal: RecoveryGoal;
 }
 
-export interface OnboardingAssessment extends HabitProfile {
+export interface OnboardingAssessment extends Omit<HabitProfile, "id"> {
   name: string;
   emotionalState: string;
   previousAttempts: number;
@@ -61,7 +63,12 @@ export interface UserProfile {
   geminiApiKey?: string;
   createdAt: string;
   onboarded: boolean;
+  /** Currently focused habit (mirrors the entry in `habits` with `activeHabitId`). */
   habit: HabitProfile;
+  /** All habits this user is working on. */
+  habits: HabitProfile[];
+  /** Id of the habit currently driving coach, dashboard, and plan. */
+  activeHabitId: string;
   currentPlanId: string | null;
 }
 
@@ -74,6 +81,8 @@ export interface PlanWeek {
 export interface RecoveryPlan {
   id: string;
   createdAt: string;
+  /** Links this plan to a specific HabitProfile when multi-habit is in use. */
+  habitId?: string;
   habit: HabitType;
   goal: RecoveryGoal;
   title: string;
@@ -188,7 +197,10 @@ export interface EmergencySessionLog {
 export interface AppState {
   profile: UserProfile | null;
   assessment: OnboardingAssessment | null;
+  /** Plan for the currently active habit. */
   plan: RecoveryPlan | null;
+  /** Plans for every tracked habit (active plan is also referenced by `plan`). */
+  plans: RecoveryPlan[];
   checkIns: DailyCheckIn[];
   cravingEvents: CravingEvent[];
   relapseEvents: RelapseEvent[];

@@ -29,28 +29,27 @@ export interface CreateAccountInput {
   username: string;
   password: string;
   displayName?: string;
-  geminiApiKey: string;
+  geminiApiKey?: string;
 }
 
 export async function createAccount(input: CreateAccountInput): Promise<AuthAccount> {
   const username = input.username.trim();
   if (!username) throw new AuthError("Username is required.");
   if (input.password.length < 4) throw new AuthError("Password must be at least 4 characters.");
-  const geminiApiKey = input.geminiApiKey.trim();
-  if (!geminiApiKey) throw new AuthError("Google Gemini API key is required.");
   if (findAccountByUsername(username)) {
     throw new AuthError("That username is already taken.");
   }
 
   const salt = generateSalt();
   const passwordHash = await hashPassword(username.toLowerCase(), input.password, salt);
+  const geminiApiKey = input.geminiApiKey?.trim() || undefined;
   const account: AuthAccount = {
     id: newUserId(),
     username,
     passwordHash,
     salt,
     displayName: input.displayName?.trim() || username,
-    geminiApiKey,
+    ...(geminiApiKey ? { geminiApiKey } : {}),
     createdAt: new Date().toISOString(),
   };
   upsertAccount(account);

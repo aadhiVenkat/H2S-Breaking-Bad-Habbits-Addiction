@@ -11,6 +11,7 @@ import { Textarea } from "@/components/ui/Textarea";
 import { AILoadingDots } from "@/components/ui/AILoadingDots";
 import { AiErrorState } from "@/components/system/AiErrorState";
 import { ProviderBadge } from "@/components/system/ProviderBadge";
+import { FormattedMessage } from "@/components/coach/FormattedMessage";
 import { useApp } from "@/lib/store/AppContext";
 import { chat, SUGGESTED_PROMPTS, detectIntent } from "@/lib/ai/coachService";
 import { extractAiMeta, getErrorMessage, recordLastAiAction, type AiResponseMeta } from "@/lib/ai/meta";
@@ -133,7 +134,7 @@ export default function CoachPage() {
                     : "bg-surface-raised border border-border-soft text-foreground rounded-bl-md",
                 )}
               >
-                {msg.content}
+                <FormattedMessage content={msg.content} />
               </div>
             </motion.div>
           ))}

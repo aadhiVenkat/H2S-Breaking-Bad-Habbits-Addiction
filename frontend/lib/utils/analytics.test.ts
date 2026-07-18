@@ -44,11 +44,21 @@ describe("buildAnalyticsSummary", () => {
     const summary = buildAnalyticsSummary(checkIns, cravingEvents, []);
 
     expect(summary.averageCraving7d).toBe(6);
+    expect(summary.averageCraving30d).toBe(6);
     expect(summary.topTriggers[0]?.trigger).toBe("stress");
     expect(summary.topTriggers[0]?.count).toBe(2);
+    expect(summary.topTriggers.some((t) => t.trigger === "social")).toBe(true);
     expect(summary.checkInCompletionRate).toBeGreaterThan(0);
     expect(summary.cravingByDay).toHaveLength(14);
     expect(summary.moodTrend).toHaveLength(14);
+  });
+
+  it("returns zero averages when there are no craving events", () => {
+    const summary = buildAnalyticsSummary([], [], []);
+    expect(summary.averageCraving7d).toBe(0);
+    expect(summary.averageCraving30d).toBe(0);
+    expect(summary.topTriggers).toEqual([]);
+    expect(summary.relapseTimeline).toEqual([]);
   });
 
   it("builds relapse timeline in chronological order", () => {

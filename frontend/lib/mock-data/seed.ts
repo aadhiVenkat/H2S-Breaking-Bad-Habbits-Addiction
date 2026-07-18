@@ -36,6 +36,7 @@ export const SEED_PROFILE: UserProfile = {
   createdAt: daysAgoISO(24) + "T09:00:00.000Z",
   onboarded: true,
   habit: {
+    id: "habit-seed-1",
     habit: "doomscrolling",
     habitLabel: "Doomscrolling",
     frequencyPerDay: 18,
@@ -46,12 +47,28 @@ export const SEED_PROFILE: UserProfile = {
     motivation: "I want my evenings and my focus back — I'm tired of losing hours to my phone.",
     goal: "reduce",
   },
+  habits: [
+    {
+      id: "habit-seed-1",
+      habit: "doomscrolling",
+      habitLabel: "Doomscrolling",
+      frequencyPerDay: 18,
+      yearsActive: 3,
+      intensity: 4,
+      triggers: ["boredom", "stress", "night_routine", "loneliness"],
+      peakTimes: ["night", "late_night", "morning"],
+      motivation: "I want my evenings and my focus back — I'm tired of losing hours to my phone.",
+      goal: "reduce",
+    },
+  ],
+  activeHabitId: "habit-seed-1",
   currentPlanId: "plan-seed-1",
 };
 
 export const SEED_PLAN: RecoveryPlan = {
   id: "plan-seed-1",
   createdAt: daysAgoISO(24) + "T09:05:00.000Z",
+  habitId: "habit-seed-1",
   habit: "doomscrolling",
   goal: "reduce",
   title: "Reclaiming your evenings, one scroll-free hour at a time",
@@ -314,6 +331,7 @@ export function buildSeedState(): AppState {
     profile: SEED_PROFILE,
     assessment: null,
     plan: SEED_PLAN,
+    plans: [SEED_PLAN],
     checkIns,
     cravingEvents,
     relapseEvents: SEED_RELAPSES,

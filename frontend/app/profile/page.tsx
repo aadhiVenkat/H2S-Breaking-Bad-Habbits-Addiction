@@ -8,13 +8,11 @@ import { PageContainer } from "@/components/layout/PageContainer";
 import { Card, CardHeader, CardTitle, CardDescription } from "@/components/ui/Card";
 import { Button } from "@/components/ui/Button";
 import { Badge } from "@/components/ui/Badge";
-import { Input } from "@/components/ui/Input";
 import { AILoadingDots } from "@/components/ui/AILoadingDots";
 import { DisclaimerFooter } from "@/components/layout/DisclaimerFooter";
 import { AiErrorState } from "@/components/system/AiErrorState";
 import { ProviderBadge } from "@/components/system/ProviderBadge";
 import { AiStatusPanel } from "@/components/system/AiStatusPanel";
-import { ThemeToggle } from "@/components/profile/ThemeToggle";
 import { useApp } from "@/lib/store/AppContext";
 import { useAuth } from "@/lib/auth/AuthContext";
 import { generateReplacements } from "@/lib/ai/replacementService";
@@ -22,29 +20,28 @@ import { extractAiMeta, getErrorMessage, recordLastAiAction, type AiResponseMeta
 import { GOAL_LABELS, habitLabel, triggerLabel } from "@/lib/utils/labels";
 import type { ReplacementHabit } from "@/lib/types";
 import { cn } from "@/lib/utils/cn";
+import { HabitManager } from "@/components/profile/HabitManager";
+import { normalizeUserProfile } from "@/lib/utils/habits";
 
 export default function ProfilePage() {
   const router = useRouter();
-  const { account, logout, updateGeminiKey } = useAuth();
+  const { account, logout } = useAuth();
   const {
     state,
     resetLocalData,
-    updateUserProfile,
     saveReplacementHabit,
     rateReplacementHabit,
     useReplacementHabit: recordReplacementUse,
     toggleReplacementSaved,
+    setActiveHabit,
+    updateHabit,
+    removeHabit,
   } = useApp();
 
   const [generating, setGenerating] = useState(false);
   const [genError, setGenError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<ReplacementHabit[]>([]);
   const [meta, setMeta] = useState<AiResponseMeta | null>(null);
-  // null = follow account key; string = user is editing
-  const [apiKeyDraft, setApiKeyDraft] = useState<string | null>(null);
-  const apiKeyValue = apiKeyDraft ?? account?.geminiApiKey ?? "";
-  const [keySaved, setKeySaved] = useState(false);
-  const [keyError, setKeyError] = useState<string | null>(null);
 
   async function handleGenerate() {
     if (!state.profile) return;
@@ -60,24 +57,6 @@ export default function ProfilePage() {
       setGenError(getErrorMessage(err));
     } finally {
       setGenerating(false);
-    }
-  }
-
-  function handleSaveApiKey() {
-    const trimmed = apiKeyValue.trim();
-    if (!trimmed) {
-      setKeyError("Google Gemini API key cannot be empty.");
-      return;
-    }
-    setKeyError(null);
-    try {
-      updateGeminiKey(trimmed);
-      updateUserProfile({ geminiApiKey: trimmed });
-      setApiKeyDraft(null);
-      setKeySaved(true);
-      window.setTimeout(() => setKeySaved(false), 2000);
-    } catch (err) {
-      setKeyError(err instanceof Error ? err.message : "Could not save API key.");
     }
   }
 
@@ -114,7 +93,6 @@ export default function ProfilePage() {
               Signed in as <span className="font-medium text-foreground">{account.username}</span>
             </p>
           )}
-          <ThemeToggle />
           <Button variant="outline" icon={<LogOut size={15} />} onClick={handleLogout}>
             Log out
           </Button>
@@ -123,7 +101,8 @@ export default function ProfilePage() {
     );
   }
 
-  const { profile, plan, replacementHabits } = state;
+  const { profile: rawProfile, plan, replacementHabits } = state;
+  const profile = normalizeUserProfile(rawProfile);
   const saved = replacementHabits.filter((r) => r.savedByUser);
   const others = replacementHabits.filter((r) => !r.savedByUser);
 
@@ -135,6 +114,7 @@ export default function ProfilePage() {
           <p className="text-sm text-foreground-muted">
             {account?.username ? `@${account.username} · ` : ""}
             {habitLabel(profile.habit.habit)} · {GOAL_LABELS[profile.habit.goal]}
+            {profile.habits.length > 1 ? ` · ${profile.habits.length} habits` : ""}
           </p>
         </div>
       </div>
@@ -142,7 +122,7 @@ export default function ProfilePage() {
       <Card className="space-y-3">
         <CardHeader>
           <CardTitle>Account</CardTitle>
-          <CardDescription>Local username and required Google Gemini key (BYOK).</CardDescription>
+          <CardDescription>Local username stored on this device.</CardDescription>
         </CardHeader>
         <dl className="grid gap-3 text-sm">
           <div>
@@ -150,44 +130,22 @@ export default function ProfilePage() {
             <dd className="font-medium">{account?.username ?? profile.username ?? "—"}</dd>
           </div>
         </dl>
-        <div>
-          <label htmlFor="profile-gemini-key" className="mb-1.5 block text-sm font-medium text-foreground">
-            Google Gemini API key
-          </label>
-          <Input
-            id="profile-gemini-key"
-            type="password"
-            autoComplete="off"
-            value={apiKeyValue}
-            onChange={(e) => {
-              setApiKeyDraft(e.target.value);
-              setKeyError(null);
-            }}
-            placeholder="AIza…"
-            required
-          />
-          <p className="mt-1.5 text-xs text-foreground-subtle">
-            Stored only in this browser. Sent as X-Gemini-Key on AI requests.
-          </p>
-          {keyError && (
-            <p className="mt-1.5 text-xs text-danger" role="alert">
-              {keyError}
-            </p>
-          )}
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={handleSaveApiKey} disabled={!apiKeyValue.trim()}>
-            {keySaved ? "Saved" : "Save API key"}
-          </Button>
-          <Button size="sm" variant="outline" icon={<LogOut size={14} />} onClick={handleLogout}>
-            Log out
-          </Button>
-        </div>
+        <Button size="sm" variant="outline" icon={<LogOut size={14} />} onClick={handleLogout}>
+          Log out
+        </Button>
       </Card>
+
+      <HabitManager
+        habits={profile.habits}
+        activeHabitId={profile.activeHabitId}
+        onSetActive={setActiveHabit}
+        onUpdateHabit={updateHabit}
+        onRemoveHabit={removeHabit}
+      />
 
       <Card className="space-y-3">
         <CardHeader>
-          <CardTitle>Habit profile</CardTitle>
+          <CardTitle>Active habit details</CardTitle>
         </CardHeader>
         <dl className="grid grid-cols-2 gap-3 text-sm">
           <div>
@@ -305,7 +263,6 @@ export default function ProfilePage() {
         <CardHeader>
           <CardTitle>Local data</CardTitle>
         </CardHeader>
-        <ThemeToggle />
         <p className="text-sm text-foreground-muted">
           Progress for this account is stored in this browser&apos;s localStorage. Logging out keeps your data for next
           login.

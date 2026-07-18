@@ -41,44 +41,72 @@ const TREND_DIRECTIONS = ["improving", "steady", "needs_support"] as const;
 
 const EMERGENCY_TOOL_IDS = ["breathing", "delay", "grounding", "distraction", "coach"] as const;
 
+function tryParseJson(candidate: string): unknown | undefined {
+  try {
+    return JSON.parse(candidate);
+  } catch {
+    return undefined;
+  }
+}
+
+/** Find the first balanced `{...}` or `[...]` JSON value in `text`. */
+function extractBalancedJson(text: string): unknown | undefined {
+  for (let i = 0; i < text.length; i++) {
+    const open = text[i];
+    if (open !== "{" && open !== "[") continue;
+    const close = open === "{" ? "}" : "]";
+    let depth = 0;
+    let inString = false;
+    let escape = false;
+
+    for (let j = i; j < text.length; j++) {
+      const ch = text[j]!;
+      if (inString) {
+        if (escape) {
+          escape = false;
+        } else if (ch === "\\") {
+          escape = true;
+        } else if (ch === '"') {
+          inString = false;
+        }
+        continue;
+      }
+
+      if (ch === '"') {
+        inString = true;
+        continue;
+      }
+      if (ch === open) depth += 1;
+      else if (ch === close) {
+        depth -= 1;
+        if (depth === 0) {
+          const parsed = tryParseJson(text.slice(i, j + 1));
+          if (parsed !== undefined) return parsed;
+          break;
+        }
+      }
+    }
+  }
+  return undefined;
+}
+
 export function extractJson(text: string): unknown {
   const trimmed = text.trim();
   if (!trimmed) throw parseError("empty response");
 
-  try {
-    return JSON.parse(trimmed);
-  } catch {
-    // fall through to fence / substring extraction
-  }
+  const direct = tryParseJson(trimmed);
+  if (direct !== undefined) return direct;
 
   const fence = trimmed.match(/```(?:json)?\s*([\s\S]*?)```/i);
   if (fence?.[1]) {
-    try {
-      return JSON.parse(fence[1].trim());
-    } catch {
-      // continue
-    }
+    const fenced = tryParseJson(fence[1].trim());
+    if (fenced !== undefined) return fenced;
+    const fromFence = extractBalancedJson(fence[1]);
+    if (fromFence !== undefined) return fromFence;
   }
 
-  const start = trimmed.indexOf("{");
-  const end = trimmed.lastIndexOf("}");
-  if (start !== -1 && end > start) {
-    try {
-      return JSON.parse(trimmed.slice(start, end + 1));
-    } catch {
-      // continue
-    }
-  }
-
-  const arrStart = trimmed.indexOf("[");
-  const arrEnd = trimmed.lastIndexOf("]");
-  if (arrStart !== -1 && arrEnd > arrStart) {
-    try {
-      return JSON.parse(trimmed.slice(arrStart, arrEnd + 1));
-    } catch {
-      // continue
-    }
-  }
+  const balanced = extractBalancedJson(trimmed);
+  if (balanced !== undefined) return balanced;
 
   throw parseError("could not extract JSON from model output");
 }
