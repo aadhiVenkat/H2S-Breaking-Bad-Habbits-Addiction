@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Star, Bookmark, Play, Sparkles, RotateCcw, ExternalLink, LogOut } from "lucide-react";
@@ -40,13 +40,11 @@ export default function ProfilePage() {
   const [genError, setGenError] = useState<string | null>(null);
   const [suggestions, setSuggestions] = useState<ReplacementHabit[]>([]);
   const [meta, setMeta] = useState<AiResponseMeta | null>(null);
-  const [apiKeyDraft, setApiKeyDraft] = useState(account?.geminiApiKey ?? "");
+  // null = follow account key; string = user is editing
+  const [apiKeyDraft, setApiKeyDraft] = useState<string | null>(null);
+  const apiKeyValue = apiKeyDraft ?? account?.geminiApiKey ?? "";
   const [keySaved, setKeySaved] = useState(false);
   const [keyError, setKeyError] = useState<string | null>(null);
-
-  useEffect(() => {
-    setApiKeyDraft(account?.geminiApiKey ?? "");
-  }, [account?.geminiApiKey]);
 
   async function handleGenerate() {
     if (!state.profile) return;
@@ -66,7 +64,7 @@ export default function ProfilePage() {
   }
 
   function handleSaveApiKey() {
-    const trimmed = apiKeyDraft.trim();
+    const trimmed = apiKeyValue.trim();
     if (!trimmed) {
       setKeyError("Google Gemini API key cannot be empty.");
       return;
@@ -75,6 +73,7 @@ export default function ProfilePage() {
     try {
       updateGeminiKey(trimmed);
       updateUserProfile({ geminiApiKey: trimmed });
+      setApiKeyDraft(null);
       setKeySaved(true);
       window.setTimeout(() => setKeySaved(false), 2000);
     } catch (err) {
@@ -159,7 +158,7 @@ export default function ProfilePage() {
             id="profile-gemini-key"
             type="password"
             autoComplete="off"
-            value={apiKeyDraft}
+            value={apiKeyValue}
             onChange={(e) => {
               setApiKeyDraft(e.target.value);
               setKeyError(null);
@@ -177,7 +176,7 @@ export default function ProfilePage() {
           )}
         </div>
         <div className="flex flex-wrap gap-2">
-          <Button size="sm" onClick={handleSaveApiKey} disabled={!apiKeyDraft.trim()}>
+          <Button size="sm" onClick={handleSaveApiKey} disabled={!apiKeyValue.trim()}>
             {keySaved ? "Saved" : "Save API key"}
           </Button>
           <Button size="sm" variant="outline" icon={<LogOut size={14} />} onClick={handleLogout}>

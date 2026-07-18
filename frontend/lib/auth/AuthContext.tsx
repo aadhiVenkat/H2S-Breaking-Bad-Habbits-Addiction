@@ -48,10 +48,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [account, setAccount] = useState<AuthAccount | null>(null);
 
   useEffect(() => {
-    const next = refreshFromStorage();
-    setSession(next.session);
-    setAccount(next.account);
-    setReady(true);
+    let cancelled = false;
+    // Defer so hydration setState is not synchronous inside the effect body
+    // (avoids react-hooks/set-state-in-effect during next build).
+    queueMicrotask(() => {
+      if (cancelled) return;
+      const next = refreshFromStorage();
+      setSession(next.session);
+      setAccount(next.account);
+      setReady(true);
+    });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const createAccount = useCallback(async (input: CreateAccountInput) => {
@@ -81,7 +90,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     setAccount(updated);
   }, []);
 
-  const getGeminiApiKey = useCallback(() => readGeminiKey(), [account]);
+  const getGeminiApiKey = useCallback(() => readGeminiKey(), []);
 
   const value = useMemo<AuthContextValue>(
     () => ({

@@ -40,7 +40,9 @@ function migratePersistedState(state: AppState): AppState {
   const legacy = profile.openaiApiKey?.trim();
   if (!legacy && !("openaiApiKey" in profile)) return state;
 
-  const { openaiApiKey: _removed, ...rest } = profile;
+  // Drop legacy openaiApiKey while migrating to geminiApiKey
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars -- omit only
+  const { openaiApiKey, ...rest } = profile;
   return {
     ...state,
     profile: {
