@@ -1,0 +1,21 @@
+# Firebase App Hosting — Next.js frontend (rootDir: frontend)
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+#
+# When creating the App Hosting backend, set the app root directory to `frontend`.
+# Replace NEXT_PUBLIC_API_BASE_URL with your Cloud Run API URL after backend deploy.
+
+runConfig:
+  minInstances: 0
+  maxInstances: 10
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  # Cloud Run backend origin (no trailing slash). Required at BUILD so Next.js
+  # inlines NEXT_PUBLIC_* for the browser.
+  - variable: NEXT_PUBLIC_API_BASE_URL
+    value: https://breakfree-api-910266568473.us-central1.run.app
+    availability:
+      - BUILD
+      - RUNTIME

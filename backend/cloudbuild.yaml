@@ -1,0 +1,46 @@
+# Optional Cloud Build pipeline (Docker image → Artifact Registry → Cloud Run).
+# Prefer the simpler `gcloud run deploy --source .` flow in DEPLOY.md for first deploys.
+#
+# One-time: create the Artifact Registry Docker repo, then from backend/:
+#   gcloud artifacts repositories create breakfree-api \
+#     --repository-format=docker --location=us-central1
+#   gcloud builds submit --config cloudbuild.yaml .
+#
+# Set GEMINI_API_KEY and CORS_ORIGIN on the Cloud Run
+# service after deploy (Console or gcloud). Do not put secrets in this file.
+
+substitutions:
+  _REGION: us-central1
+  _SERVICE: breakfree-api
+  _TAG: latest
+
+steps:
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - build
+      - -t
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:${_TAG}
+      - .
+
+  - name: gcr.io/cloud-builders/docker
+    args:
+      - push
+      - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:${_TAG}
+
+  - name: gcr.io/google.com/cloudsdktool/cloud-sdk
+    entrypoint: gcloud
+    args:
+      - run
+      - deploy
+      - ${_SERVICE}
+      - --image=${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:${_TAG}
+      - --region=${_REGION}
+      - --platform=managed
+      - --allow-unauthenticated
+      - --port=8080
+
+images:
+  - ${_REGION}-docker.pkg.dev/$PROJECT_ID/${_SERVICE}/${_SERVICE}:${_TAG}
+
+options:
+  logging: CLOUD_LOGGING_ONLY
